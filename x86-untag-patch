@@ -1,0 +1,98 @@
+diff -rupN linux-5.16.10/arch/x86/include/asm/uaccess.h dwlinux-5.16.10/arch/x86/include/asm/uaccess.h
+--- linux-5.16.10/arch/x86/include/asm/uaccess.h	2022-02-23 17:54:07.339289167 -0500
++++ dwlinux-5.16.10/arch/x86/include/asm/uaccess.h	2022-02-22 10:22:12.569332000 -0500
+@@ -49,6 +49,20 @@ static inline bool pagefault_disabled(vo
+ # define WARN_ON_IN_IRQ()
+ #endif
+ 
++/*
++ * When dealing with datawatch we may end up with a tainted pointer. At 
++ * this step, we clear the tag to get a sane pointer. The tag is a 
++ * 16-bit constant located in the 16 top bits of the pointer.
++ */
++#define __dw_untagged_addr(addr)	\
++	((__force __typeof__(addr))sign_extend64((__force u64)(addr), 47))
++
++#define canonicalize_user_addr(addr)	({					\
++	u64 __addr = (__force u64)(addr);					\
++	__addr &= __dw_untagged_addr(__addr);					\
++	(__force __typeof__(addr))__addr;					\
++})
++
+ /**
+  * access_ok - Checks if a user space pointer is valid
+  * @addr: User space pointer to start of block to check
+@@ -69,6 +83,7 @@ static inline bool pagefault_disabled(vo
+ #define access_ok(addr, size)					\
+ ({									\
+ 	WARN_ON_IN_IRQ();						\
++	canonicalize_user_addr(addr);					\
+ 	likely(!__range_not_ok(addr, size, TASK_SIZE_MAX));		\
+ })
+ 
+diff -rupN linux-5.16.10/lib/strncpy_from_user.c dwlinux-5.16.10/lib/strncpy_from_user.c
+--- linux-5.16.10/lib/strncpy_from_user.c	2022-02-23 17:54:22.439352077 -0500
++++ dwlinux-5.16.10/lib/strncpy_from_user.c	2022-02-21 10:35:17.365879000 -0500
+@@ -110,10 +110,13 @@ efault:
+  * If @count is smaller than the length of the string, copies @count bytes
+  * and returns @count.
+  */
+-long strncpy_from_user(char *dst, const char __user *src, long count)
++//long strncpy_from_user(char *dst, const char __user *src, long count)
++long strncpy_from_user(char *dst, const char __user *user_src, long count)
+ {
+ 	unsigned long max_addr, src_addr;
+ 
++	const char __user *src = canonicalize_user_addr(user_src);
++
+ 	might_fault();
+ 	if (should_fail_usercopy())
+ 		return -EFAULT;
+diff -rupN linux-5.16.10/lib/strnlen_user.c dwlinux-5.16.10/lib/strnlen_user.c
+--- linux-5.16.10/lib/strnlen_user.c	2022-02-23 17:54:22.439352077 -0500
++++ dwlinux-5.16.10/lib/strnlen_user.c	2022-02-21 10:38:10.366237000 -0500
+@@ -89,10 +89,13 @@ efault:
+  * threads. Use "strncpy_from_user()" instead to get a stable copy
+  * of the string.
+  */
+-long strnlen_user(const char __user *str, long count)
++//long strnlen_user(const char __user *str, long count)
++long strnlen_user(const char __user *user_str, long count)
+ {
+ 	unsigned long max_addr, src_addr;
+ 
++	const char __user *str = canonicalize_user_addr(user_str);
++
+ 	if (unlikely(count <= 0))
+ 		return 0;
+ 
+diff -rupN linux-5.16.10/mm/madvise.c dwlinux-5.16.10/mm/madvise.c
+--- linux-5.16.10/mm/madvise.c	2022-02-23 17:54:22.543352518 -0500
++++ dwlinux-5.16.10/mm/madvise.c	2022-02-21 10:44:54.591449000 -0500
+@@ -1225,6 +1225,7 @@ out:
+ 
+ SYSCALL_DEFINE3(madvise, unsigned long, start, size_t, len_in, int, behavior)
+ {
++	start = (unsigned long) canonicalize_user_addr(start);
+ 	return do_madvise(current->mm, start, len_in, behavior);
+ }
+ 
+diff -rupN linux-5.16.10/mm/mempolicy.c dwlinux-5.16.10/mm/mempolicy.c
+--- linux-5.16.10/mm/mempolicy.c	2022-02-23 17:54:22.547352535 -0500
++++ dwlinux-5.16.10/mm/mempolicy.c	2022-02-21 11:09:04.166448000 -0500
+@@ -1481,6 +1481,7 @@ SYSCALL_DEFINE6(mbind, unsigned long, st
+ 		unsigned long, mode, const unsigned long __user *, nmask,
+ 		unsigned long, maxnode, unsigned int, flags)
+ {
++	start = canonicalize_user_addr(start);
+ 	return kernel_mbind(start, len, mode, nmask, maxnode, flags);
+ }
+ 
+@@ -1640,6 +1641,7 @@ SYSCALL_DEFINE5(get_mempolicy, int __use
+ 		unsigned long __user *, nmask, unsigned long, maxnode,
+ 		unsigned long, addr, unsigned long, flags)
+ {
++	addr = canonicalize_user_addr(addr);
+ 	return kernel_get_mempolicy(policy, nmask, maxnode, addr, flags);
+ }
+ 

@@ -47,12 +47,13 @@ static void sigsegv_handler(int sig, siginfo_t *si, void *ptr)
 {
     ucontext_t *uc = (ucontext_t *)ptr;
 
-    /* Get the address at the time the signal was raised */
-    
     //printf("SIGSEGV for Address: 0x%p",si->si_addr);
     //printf(" for instruction:0x%lx\n",(long) uc->uc_mcontext.gregs[REG_RIP]);
 
-    // The tainted pointer is placed in %rax register
+    /* %rax register maintains a copy of the tainted address at the time the signal was raised.
+     * Check to see if the signal was raised because of a tainted pointer.
+     * In affirmative, we need to jump to a trampoline similar to Paul's code.TODO
+     */
     if(((long) uc->uc_mcontext.gregs[REG_RAX] & (long) (dw_TAG << 48)) != 0) {
       printf("The tainted pointer triggered SIGSEGV : 0x%lx\n", (long) uc->uc_mcontext.gregs[REG_RAX]);
     }
@@ -72,12 +73,12 @@ dw_init(void)
   __malloc_hook = dw_malloc_hook;
   __free_hook = dw_free_hook;
 
- // TAG 
+  // TAG 
   dw_MASK = ~(65535ULL << 48);
   dw_TAG = 12345;
 
- count = 1;
- all_count = 0;
+  count = 1;
+  all_count = 0;
   free_count = 0;
    
   struct sigaction sa;
@@ -101,9 +102,9 @@ dw_malloc_hook(size_t size, const void *caller)
   result = malloc (size);
   void *p=result;
 
-  printf("Orig pointer : %p\n", result);
+  printf("Orig address : %p\n", result);
   result = (void *)(((uintptr_t)result & dw_MASK) | ((uintptr_t)dw_TAG << 48));
-  printf("Tagged pointer : %p\n", result);
+  printf("Tagged address : %p\n", result);
 
   unsigned long return_addr = (unsigned long)__builtin_return_address(0);
 
@@ -111,15 +112,14 @@ dw_malloc_hook(size_t size, const void *caller)
   old_malloc_hook = __malloc_hook;
   old_free_hook = __free_hook;
 
-  printf("malloc(%zu) called from %p returns %p for %lx \n",
-		   size, caller, result, return_addr);
+  //printf("malloc(%zu) called from %p returns %p for %lx \n",
+  //      size, caller, result, return_addr);
 
   /* Restore our own hooks */
   __malloc_hook = dw_malloc_hook;
   __free_hook = dw_free_hook;
 
   return result;
-
 }
 
 static void
@@ -129,9 +129,9 @@ dw_free_hook (void *ptr, const void *caller)
   __malloc_hook = old_malloc_hook;
   __free_hook = old_free_hook;
 
-  printf("Free: before untaint : %p \n", ptr);
+//  printf("Free: before untaint : %p \n", ptr);
 	ptr = (void *)(((intptr_t) ptr << 16) >> 16);
-  printf("Free: after untaint : %p \n", ptr);
+//  printf("Free: after untaint : %p \n", ptr);
  
   /* Call recursively */
   free (ptr);
