@@ -4,10 +4,51 @@
 #include <dlfcn.h>
 #include <inttypes.h>
 #include <sys/types.h>
+#include <errno.h>
+
 #include "dwhooks.h"
 
 const uintptr_t DW_MASK = ~(65535ULL << 48);
 
+void print_result_msg(int errnum, int nbytes)
+{
+	switch (errnum)
+	{
+		case 0:
+			printf("Success. Number of bytes written is %d.\n", nbytes);
+			break;
+		case EINTR:
+			printf("The system call was interrupted.\n");
+			break;
+		case EIO:
+			printf("Low-level HW R/W error.\n");
+			break;
+		case EBADF:
+			printf("File descriptor is not valid or READ_ONLY file\n");
+			break;
+		case EACCES:
+			printf("No write permission\n");
+			break;
+		case EFAULT:
+			printf("The address specified in the function is an invalid address.\n");
+			break;
+		case EINVAL:
+			printf("Invalid argument(s).\n");
+			break;
+		case EFBIG:
+			printf("File size to large.\n");
+			break;
+		case ENOSPC:
+			printf("No space available.\n");
+			break;
+		case EPIPE:
+			printf("Broken pipe.\n");
+			break;
+	        default:
+			printf("Unknown error\n");
+	}
+}
+ 
 void print_pointer(uintptr_t addr, const char *msg) {
 
 	uintptr_t i = (1ULL << (sizeof(addr)*8-1));
@@ -40,7 +81,9 @@ uintptr_t untaint(uintptr_t p)
   return(p);
 }
 
-int main(int argc, char* argv[]) {
+int main(int argc, char* argv[])
+{
+  int errnum;
 
   dw_init();
 
@@ -57,21 +100,27 @@ int main(int argc, char* argv[]) {
   *ptr = 20;
 
   /* 
-   * Pass an ordinary (untainted) pointer to a system call
+   * Pass an ordinary (untaintedi) pointer to the write system call
+   * SUCCESS
    */
   printf("The value of ptr is : %p\n", ptr);
   int nW = write(1, ptr, sizeof(int));
-  printf("Write SYSCALL: number of bytes written : %d\n", nW);
+  errnum = errno;
+  print_result_msg(errnum, nW);
 
+  
   ptr =  taint(ptr, tag_data);
 
   /* 
-   * Pass a tainted pointer to a system call
+   * Pass a tainted pointer to the write system call
+   * FAIL
    */
   printf("The value of ptr is : %p\n", ptr);
   nW = write(1, ptr, sizeof(int));
-  printf("Write SYSCALL: number of bytes written : %d\n", nW);
-  
+  errnum = errno;
+  print_result_msg(errnum, nW);
+
+
   // Access will generate a SIGSEGV as the address is tainted.
   *ptr = 20;
 
