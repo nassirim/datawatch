@@ -85,6 +85,14 @@ int main(int argc, char* argv[])
 {
   int errnum;
 
+  if(argc < 2) {
+  	printf("%s %s\n",argv[0], "sleep_time");
+	exit(1);
+  }
+
+
+	printf("PID:%ld -- sleep time %d\n",(long)getpid(), atoi(argv[1]));
+  sleep(atoi(argv[1]));
   dw_init();
 
   int *ptr = malloc(sizeof(int));
