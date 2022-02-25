@@ -8,6 +8,8 @@
 
 #include "dwhooks.h"
 
+#define X86_TBMASK 0xFFFF000000000000
+
 const uintptr_t DW_MASK = ~(65535ULL << 48);
 
 void print_result_msg(int errnum, int nbytes)
@@ -117,7 +119,18 @@ int main(int argc, char* argv[])
   print_result_msg(errnum, nW);
 
   
+  if (((uintptr_t)ptr & X86_TBMASK) != 0) {
+    printf("The address is tagged ? %p \n", ((uintptr_t)ptr & X86_TBMASK));
+  } else
+    printf("The address is not tagged 0x%lx \n", ((uintptr_t)ptr & X86_TBMASK));
+
+
   ptr =  taint(ptr, tag_data);
+
+  if (((uintptr_t)ptr & X86_TBMASK) != 0)
+    printf("The address is tagged %p \n", ((uintptr_t)ptr & X86_TBMASK));
+  else
+    printf("The address is not tagged 0x%lx \n", ((uintptr_t)ptr & X86_TBMASK));
 
   /* 
    * Pass a tainted pointer to the write system call
