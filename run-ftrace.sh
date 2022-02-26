@@ -9,10 +9,13 @@ echo "Process ID is: $PID"
 cd /sys/kernel/tracing
 echo > trace #Empty trace buffer
 
-echo function_graph > current_tracer
-#echo function > current_tracer
-#echo __x64_sys_write > set_ftrace_filter
-echo > set_ftrace_filter
+#echo function_graph > current_tracer
+echo function > current_tracer
+echo __x64_sys_write > set_ftrace_filter
+echo 1 > events/syscalls/sys_enter_write/enable
+echo 1 > events/syscalls/sys_exit_write/enable
+#echo > set_ftrace_filter
+#echo sys_write > set_ftrace_filter
 
 echo $PID > set_ftrace_pid
 echo 1 > tracing_on
